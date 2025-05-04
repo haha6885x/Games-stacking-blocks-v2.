@@ -1,0 +1,300 @@
+<!DOCTYPE html><html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>games stacking blocks</title>
+  <style>
+    body { text-align: center; font-family: sans-serif; background: #f0f0f0; }
+    canvas { background: #fff; display: block; margin: 20px auto; border: 2px solid #000; }
+    #joystick {
+      width: 150px;
+      height: 150px;
+      background: #ddd;
+      border-radius: 50%;
+      position: relative;
+      margin: 60px auto;
+      touch-action: none;
+    }
+    #stick {
+      width: 50px;
+      height: 50px;
+      background: #555;
+      border-radius: 50%;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+    button { padding: 10px 15px; margin: 5px; font-size: 16px; }
+    #message, #successMessage, #score {
+      font-weight: bold;
+      margin-top: 10px;
+    }
+    #message {
+      animation: blink 1s step-end infinite;
+    }
+    #successMessage {
+      color: yellow;
+      font-size: 24px;
+    }
+    #score {
+      font-size: 20px;
+      color: green;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+  </style>
+</head>
+<body>
+  <h1>Block Offline Sederhana</h1>
+  <div id="score">Score: 0 | Best Score: <span id="bestScore">0</span></div>
+  <button onclick="startGame()">Mulai Ulang</button>
+  <canvas id="gameCanvas" width="300" height="300"></canvas>
+  <div id="joystick">
+    <div id="stick"></div>
+  </div>
+  <button onclick="applyPiece()">🆗</button>
+  <div id="message"></div>
+  <div id="successMessage"></div>  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const SIZE = 10, BLOCK_SIZE = 30;
+    let board = [], currentPiece, score = 0, bestScore = 0;
+    let messageEl = document.getElementById('message');
+    let successEl = document.getElementById('successMessage');
+    let scoreEl = document.getElementById('score');
+    const bestScoreEl = document.getElementById('bestScore');
+    const stick = document.getElementById('stick');
+    const joystick = document.getElementById('joystick');
+    let interval, dirX = 0, dirY = 0;
+
+    function createBoard() {
+      board = Array.from({length: SIZE}, () => Array(SIZE).fill(0));
+    }
+
+    function drawBoard() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (let r = 0; r < SIZE; r++) {
+        for (let c = 0; c < SIZE; c++) {
+          ctx.strokeStyle = '#aaa';
+          ctx.strokeRect(c * BLOCK_SIZE, r * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+          if (board[r][c]) {
+            ctx.fillStyle = 'cyan';
+            ctx.fillRect(c * BLOCK_SIZE, r * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+          }
+        }
+      }
+    }
+
+    function drawPiece() {
+      currentPiece.shape.forEach((row, r) => {
+        row.forEach((val, c) => {
+          if (val) {
+            ctx.fillStyle = 'orange';
+            ctx.fillRect((currentPiece.x + c) * BLOCK_SIZE, (currentPiece.y + r) * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+            ctx.strokeStyle = '#555';
+            ctx.strokeRect((currentPiece.x + c) * BLOCK_SIZE, (currentPiece.y + r) * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+          }
+        });
+      });
+    }
+
+    function spawnPiece() {
+      const shapes = [
+        [[1,1,1],[0,1,0]],
+        [[1,1],[1,1]],
+        [[0,1,1],[1,1,0]],
+        [[1,1,0],[0,1,1]],
+        [[1,1,1,1]],
+        [[1,0,0],[1,1,1]],
+        [[0,0,1],[1,1,1]]
+      ];
+      const shape = shapes[Math.floor(Math.random() * shapes.length)];
+      currentPiece = { shape, x: 3, y: 3 };
+    }
+
+    function movePiece(dx, dy) {
+      const newX = currentPiece.x + dx;
+      const newY = currentPiece.y + dy;
+      if (isValidMove(newX, newY, currentPiece.shape)) {
+        currentPiece.x = newX;
+        currentPiece.y = newY;
+        messageEl.textContent = '';
+      } else {
+        messageEl.textContent = 'Tidak bisa melebihi batas!';
+        messageEl.style.color = 'red';
+        messageEl.style.animation = '';
+      }
+      render();
+    }
+
+    function isValidMove(x, y, shape) {
+      return shape.every((row, r) =>
+        row.every((val, c) => {
+          if (!val) return true;
+          const newX = x + c, newY = y + r;
+          return newX >= 0 && newX < SIZE && newY >= 0 && newY < SIZE;
+        })
+      );
+    }
+
+    function canApply() {
+      return currentPiece.shape.every((row, r) =>
+        row.every((val, c) => {
+          if (!val) return true;
+          const bx = currentPiece.x + c, by = currentPiece.y + r;
+          return board[by][bx] === 0;
+        })
+      );
+    }
+
+    function applyPiece() {
+      if (canApply()) {
+        currentPiece.shape.forEach((row, r) => {
+          row.forEach((val, c) => {
+            if (val) board[currentPiece.y + r][currentPiece.x + c] = 1;
+          });
+        });
+        checkFullRowsAndCols();
+        messageEl.textContent = '';
+        spawnPiece();
+      } else {
+        messageEl.textContent = 'Tidak bisa diterapkan karena terkena block lain!';
+        messageEl.style.color = 'red';
+        messageEl.style.animation = '';
+      }
+
+      render();
+
+      if (checkGameOver()) {
+        messageEl.textContent = 'GAME OVER';
+        messageEl.style.color = 'black';
+        messageEl.style.animation = 'blink 0.5s step-end infinite';
+        setTimeout(() => startGame(), 3000);
+      }
+    }
+
+    function checkGameOver() {
+      for (let y = 0; y < SIZE; y++) {
+        for (let x = 0; x < SIZE; x++) {
+          if (isValidMove(x, y, currentPiece.shape) && canPlaceAt(x, y)) {
+            return false;
+          }
+        }
+      }
+      return true;
+    }
+
+    function canPlaceAt(x, y) {
+      return currentPiece.shape.every((row, r) =>
+        row.every((val, c) => {
+          if (!val) return true;
+          const bx = x + c, by = y + r;
+          return bx >= 0 && bx < SIZE && by >= 0 && by < SIZE && board[by][bx] === 0;
+        })
+      );
+    }
+
+    function checkFullRowsAndCols() {
+      let cleared = false;
+      for (let r = 0; r < SIZE; r++) {
+        if (board[r].every(cell => cell === 1)) {
+          board.splice(r, 1);
+          board.unshift(Array(SIZE).fill(0));
+          increaseScore();
+          cleared = true;
+        }
+      }
+      for (let c = 0; c < SIZE; c++) {
+        if (board.every(row => row[c] === 1)) {
+          for (let r = 0; r < SIZE; r++) board[r][c] = 0;
+          increaseScore();
+          cleared = true;
+        }
+      }
+      if (cleared) showSuccess();
+    }
+
+    function increaseScore() {
+      const added = Math.floor(Math.random() * 300) + 200;
+      score += added;
+      if (score > bestScore) {
+        bestScore = score;
+        bestScoreEl.textContent = bestScore;
+      }
+      scoreEl.innerHTML = 'Score: ' + score + ' | Best Score: <span id="bestScore">' + bestScore + '</span>';
+    }
+
+    function showSuccess() {
+      const messages = ['Good!', 'Bagus!'];
+      successEl.textContent = messages[Math.floor(Math.random() * messages.length)];
+      setTimeout(() => successEl.textContent = '', 1000);
+    }
+
+    function render() {
+      drawBoard();
+      drawPiece();
+    }
+
+    function startGame() {
+      createBoard();
+      spawnPiece();
+      messageEl.textContent = '';
+      successEl.textContent = '';
+      messageEl.style.animation = '';
+      score = 0;
+      scoreEl.innerHTML = 'Score: 0 | Best Score: <span id="bestScore">' + bestScore + '</span>';
+      render();
+      moveStickToTopLeft();
+    }
+
+    function moveStickToTopLeft() {
+      stick.style.transform = "translate(-50%, -50%)";
+    }
+
+    function startMoving() {
+      if (interval) clearInterval(interval);
+      interval = setInterval(() => movePiece(dirX, dirY), 150);
+    }
+
+    function handleJoystick(touch) {
+      const rect = joystick.getBoundingClientRect();
+      const dx = touch.clientX - (rect.left + rect.width / 2);
+      const dy = touch.clientY - (rect.top + rect.height / 2);
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      const maxDistance = rect.width / 2 - stick.offsetWidth / 2;
+
+      let limitedDx = dx;
+      let limitedDy = dy;
+
+      if (distance > maxDistance) {
+        const angle = Math.atan2(dy, dx);
+        limitedDx = Math.cos(angle) * maxDistance;
+        limitedDy = Math.sin(angle) * maxDistance;
+      }
+
+      const absX = Math.abs(dx), absY = Math.abs(dy);
+      dirX = absX > absY ? (dx > 0 ? 1 : -1) : 0;
+      dirY = absY >= absX ? (dy > 0 ? 1 : -1) : 0;
+
+      stick.style.transform = `translate(${limitedDx}px, ${limitedDy}px)`;
+    }
+
+    joystick.addEventListener('touchstart', e => {
+      e.preventDefault();
+      handleJoystick(e.touches[0]);
+      startMoving();
+    });
+
+    joystick.addEventListener('touchmove', e => {
+      e.preventDefault();
+      handleJoystick(e.touches[0]);
+    });
+
+    joystick.addEventListener('touchend', e => {
+      clearInterval(interval);
+      dirX = dirY = 0;
+      stick.style.transform = 'translate(-50%, -50%)';
+    });
+
+    startGame();
+  </script></body>
+</html>
